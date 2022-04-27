@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import imageio
 import math
 import time
-# oppgave 2
+# Fast canny's algorithm for edge detection of cell nuclei
 
 # a)
 
@@ -12,7 +12,12 @@ start = time.time()
 def pad(f, M, N, R, P):
     r2 = R//2
     p2 = P//2
-    f_pad = np.zeros((M+r2*2, N+p2*2), dtype="float")
+
+    if M%2 != 0 and N%2 != 0:
+        f_pad = np.zeros((M+r2*2+1, N+p2*2+1), dtype="float")
+    else:
+        f_pad = np.zeros((M+r2*2, N+p2*2), dtype="float")
+
     # apenbart
     f_pad[:r2, :p2] = f[0,0]
     f_pad[:r2, p2:N+p2] = f[0]
@@ -32,32 +37,43 @@ def konv(kernel, f):
     M, N = f.shape
     R, P = kernel.shape
 
-    # padding
-    f_pad = pad(f, M, N, R, P)
-
     # output
     g = np.zeros((M,N), dtype="float")
 
-    # sjekker om kernel er separerbar
-    if np.linalg.matrix_rank(kernel) == 1:
-        v = (kernel[:, :1]/kernel[0,0])[::-1]
-        w = np.array([(kernel[0])[::-1]]).T
+    # sjekker om fft hadde vaert fortere
+    if ((R+P)/2)**2 > np.log2((M+N)/2):
+        kernel_pad = pad(kernel, R, P, M-R, N-P)
 
-        r2 = R//2
-        p2 = P//2
-        # utregning for separerbar
-        for i in range(M):
-            for j in range(N):
-                m = f_pad[i:i+R, j:j+P]
-                g[i, j] = (m@w).T@v
+        f_freq = np.fft.fft2(f)
+        kernel_freq = np.fft.fft2(kernel_pad)
+        g_freq = f_freq * kernel_freq
+        g = np.fft.ifftshift(np.real(np.fft.ifft2(g_freq)))
+
         return g
 
     else:
-        # utregning for useparerbar kernel
-        for i in range(M):
-            for j in range(N):
-                g[i,j] = np.sum(f_pad[i:i+R, j:j+P]*kernel)
-        return g
+        # padding
+        f_pad = pad(f, M, N, R, P)
+        # sjekker om kernel er separerbar
+        if np.linalg.matrix_rank(kernel) == 1:
+            v = (kernel[:, :1]/kernel[0,0])[::-1]
+            w = np.array([(kernel[0])[::-1]]).T
+
+            r2 = R//2
+            p2 = P//2
+            # utregning for separerbar
+            for i in range(M):
+                for j in range(N):
+                    m = f_pad[i:i+R, j:j+P]
+                    g[i, j] = (m@w).T@v
+            return g
+
+        else:
+            # utregning for useparerbar kernel
+            for i in range(M):
+                for j in range(N):
+                    g[i,j] = np.sum(f_pad[i:i+R, j:j+P]*kernel)
+            return g
 
 # b)
 
@@ -145,12 +161,12 @@ gaussian = gauss(sigma=6)
 gaussian_blur = konv(gaussian, f)
 g_out = canny(gaussian_blur, sigma=6, lth=0.12, hth=0.27)
 
-plt.subplot(1, 3, 1)
+plt.subplot(121)
 plt.imshow(f, cmap="gray")
-plt.subplot(1, 3, 2)
-plt.imshow(gaussian_blur, cmap="gray")
-plt.subplot(1, 3, 3)
+plt.title("original image")
+plt.subplot(122)
 plt.imshow(g_out, cmap="gray", vmax=100)
+plt.title("detected edges of cell nuclei")
 print(time.time()-start)
 
 plt.show()
